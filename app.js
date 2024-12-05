@@ -1,5 +1,7 @@
 "use strict";
 
+// https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&hourly=temperature_2m
+
 // getCoordinates()
 // Demande au navigateur de détecter la position actuelle de l'utilisateur et retourne une Promise
 const getCoordinates = () => {
@@ -14,7 +16,7 @@ const getPosition = async () => {
   const position = await getCoordinates();
   return {
     lat: position.coords.latitude,
-    long: position.coords.longitude
+    long: position.coords.longitude,
   };
 };
 
@@ -40,12 +42,12 @@ const parseStationData = (rawData) => {
     return {
       departure: `${formattedHours}:${formattedMinutes}`,
       destination: el.to,
-      category: el.category
+      category: el.category,
     };
   });
   return {
     station: rawData.station.name,
-    departures
+    departures,
   };
 };
 
@@ -65,7 +67,7 @@ const renderTrain = (train) => {
 };
 
 // renderStationName(station)
-// Affiche le mot passé en paramettre dans le widget CFF. 
+// Affiche le mot passé en paramettre dans le widget CFF.
 const renderStationName = (station) => {
   const stationElement = document.querySelector(".departures header p");
   stationElement.textContent = station;
@@ -76,8 +78,40 @@ const renderStationName = (station) => {
 // contenant votre position.
 const getDashboardInformation = () => {
   getPosition().then((res) => {
-    console.log(res);
   });
 };
 
 getDashboardInformation();
+
+getPosition()
+  .then((cordinates) => {
+    return Promise.all([
+      fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${cordinates.lat}&longitude=${cordinates.long}&daily=temperature_2m_max`
+      ),
+      fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${cordinates.lat}&longitude=${cordinates.long}&daily=temperature_2m_min`
+      ),
+      fetch(
+        `http://transport.opendata.ch/v1/locations?x=${cordinates.lat}&y=${cordinates.long}`
+      ),
+    ]);
+  })
+  .then((responses) => {
+    return Promise.all(responses.map((rep) => rep.json()));
+  })
+  .then((data) => {
+    renderWeather(data[1].daily.temperature_2m_min[0], data[0].daily.temperature_2m_max[0]);
+    return fetch(`http://transport.opendata.ch/v1/stationboard?id=${data[2].stations[5].id}&limit=10`)
+  })
+  .then((ResponseStationBoard) => {
+    return ResponseStationBoard.json();
+  })
+  .then((dataStationBoard) => {
+    const StationData = parseStationData(dataStationBoard);
+    renderStationName(dataStationBoard.station.name);
+    StationData.departures.forEach((train) => {
+      renderTrain(train);
+    })
+  })
+  
